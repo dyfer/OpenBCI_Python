@@ -1,20 +1,14 @@
 """
 Core OpenBCI object for handling connections and samples from the WiFi Shield
-
 Note that the LIB will take care on its own to print incoming ASCII messages if any (FIXME, BTW).
-
 EXAMPLE USE:
-
 def handle_sample(sample):
   print(sample.channels_data)
-
 wifi = OpenBCIWifi()
 wifi.start(handle_sample)
-
 TODO: Cyton/Ganglion JSON
 TODO: Ganglion Raw
 TODO: Cyton Raw
-
 """
 import asyncore
 import atexit
@@ -37,7 +31,6 @@ SAMPLE_RATE = 0  # Hz
 
 '''
 #Commands for in SDK
-
 command_stop = "s";
 command_startBinary = "b";
 '''
@@ -46,7 +39,6 @@ command_startBinary = "b";
 class OpenBCIWiFi(object):
     """
     Handle a connection to an OpenBCI wifi shield.
-
     Args:
       ip_address: The IP address of the WiFi Shield, "None" to attempt auto-detect.
       shield_name: The unique name of the WiFi Shield, such as `OpenBCI-2AD4`, will use SSDP to get IP address still,
@@ -215,7 +207,7 @@ class OpenBCIWiFi(object):
         found_shield = False
 
         def wifi_shield_found(response):
-            res = urllib2.urlopen(response.location).read()
+            res = requests.get(response.location, verify=False).text
             device_description = xmltodict.parse(res)
             cur_shield_name = str(device_description['root']['device']['serialNumber'])
             cur_base_url = str(device_description['root']['URLBase'])
@@ -250,8 +242,8 @@ class OpenBCIWiFi(object):
     def wifi_write(self, output):
         """
         Pass through commands from the WiFi Shield to the Carrier board
-        :param output: 
-        :return: 
+        :param output:
+        :return:
         """
         res_command_post = requests.post("http://%s/command" % self.ip_address,
                                          json={'command': output})
@@ -276,7 +268,6 @@ class OpenBCIWiFi(object):
         """
         Start handling streaming data from the board. Call a provided callback
         for every single sample that is processed
-
         Args:
           callback: A callback function -- or a list of functions -- that will receive a single argument of the
               OpenBCISample object captured.
@@ -419,9 +410,7 @@ class OpenBCIWiFi(object):
             print("Something went wrong while setting accelerometer: " + str(e))
 
     """
-
     Clean Up (atexit)
-
     """
 
     def stop(self):
@@ -446,9 +435,7 @@ class OpenBCIWiFi(object):
         # should not try to read/write anything after that, will crash
 
     """
-
         SETTINGS AND HELPERS
-
     """
 
     def warn(self, text):

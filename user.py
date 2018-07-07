@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     print ("------------user.py-------------")
     parser = argparse.ArgumentParser(description="OpenBCI 'user'")
-    parser.add_argument('--board', default="cyton", 
+    parser.add_argument('--board', default="cyton",
                         help="Choose between [cyton] and [ganglion] boards.")
     parser.add_argument('-l', '--list', action='store_true',
                         help="List available plugins.")
@@ -60,9 +60,9 @@ if __name__ == '__main__':
     if args.board == "cyton":
         print ("Board type: OpenBCI Cyton (v3 API)")
         from openbci import cyton as bci
-    elif args.board == "ganglion":
-        print ("Board type: OpenBCI Ganglion")
-        import openbci.ganglion as bci
+    # elif args.board == "ganglion":
+        # print ("Board type: OpenBCI Ganglion")
+        # import openbci.ganglion as bci
     else:
         raise ValueError('Board type %r was not recognized. Known are 3 and 4' % args.board)
 
@@ -72,7 +72,7 @@ if __name__ == '__main__':
         args.port = None
     else:
         print("Port: ", args.port)
-    
+
     plugins_paths = ["plugins"]
     if args.plugins_path:
         plugins_paths += args.plugins_path
@@ -111,12 +111,12 @@ if __name__ == '__main__':
         print ("user.py: Logging Disabled.")
 
     print ("\n-------INSTANTIATING BOARD-------")
-    board = bci.OpenBCIGanglion(port=args.port,
-                                daisy=args.daisy,
-                                filter_data=args.filtering,
-                                scaled_output=True,
-                                log=args.log,
-                                aux=args.aux)
+    # board = bci.OpenBCIGanglion(port=args.port,
+    #                             daisy=args.daisy,
+    #                             filter_data=args.filtering,
+    #                             scaled_output=True,
+    #                             log=args.log,
+    #                             aux=args.aux)
 
     #  Info about effective number of channels and sampling rate
     if board.daisy:
@@ -237,7 +237,7 @@ https://github.com/OpenBCI/OpenBCI_Python")
                         else:
                             print ("No function loaded")
                         rec = True
-                    
+
                 elif("start" in s):
                     board.setImpedance(False)
                     if(fun != None):

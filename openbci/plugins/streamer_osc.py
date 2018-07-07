@@ -16,13 +16,13 @@ class StreamerOSC(plugintypes.IPluginExtended):
 	  ip: IP address of the server
 	  address: name of the stream
 	"""
-	    
+
 	def __init__(self, ip='localhost', port=12345, address="/openbci"):
 		# connection infos
 		self.ip = ip
 		self.port = port
 		self.address = address
-	
+
 	# From IPlugin
 	def activate(self):
 		if len(self.args) > 0:
@@ -38,13 +38,17 @@ class StreamerOSC(plugintypes.IPluginExtended):
 	# From IPlugin: close connections, send message to client
 	def deactivate(self):
 		self.client.send_message("/quit")
-	    
+
 	# send channels values
 	def __call__(self, sample):
 		# silently pass if connection drops
+		# print(self.address)
+		# print(sample.channel_data)
 		try:
+			# print("sending")
 			self.client.send_message(self.address, sample.channel_data)
 		except:
+			print("error in send_message")
 			return
 
 	def show_help(self):
