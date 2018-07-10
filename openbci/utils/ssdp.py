@@ -47,7 +47,7 @@ class SSDPResponse(object):
         return "<SSDPResponse({location}, {st}, {usn})>".format(**self.__dict__)
 
 
-def discover(service, timeout=5, retries=1, mx=3, wifi_found_cb=None):
+def discover(service, timeout=5, retries=1, mx=3, wifi_found_cb=None, all_ip_addresses=None):
     group = ("239.255.255.250", 1900)
     message = "\r\n".join([
         'M-SEARCH * HTTP/1.1',
@@ -63,8 +63,14 @@ def discover(service, timeout=5, retries=1, mx=3, wifi_found_cb=None):
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
         sockMessage = message.format(*group, st=service, mx=mx)
         if pyVersion == 3:
-          sockMessage = sockMessage.encode("utf-8")
-        sock.sendto(sockMessage, group)
+            sockMessage = sockMessage.encode("utf-8")
+        if all_ip_addresses is not None: # send mutlicast packets on all interfaces associated with all_ip_addresses
+            for addr in all_ip_addresses:
+                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(addr))
+                sock.sendto(sockMessage, group)
+        else:
+            sock.sendto(sockMessage, group)
+
         while True:
             try:
                 response = SSDPResponse(sock.recv(1024))

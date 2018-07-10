@@ -17,6 +17,8 @@ import logging
 import re
 import socket
 import timeit
+import netifaces
+import ipaddress
 try:
     import urllib2
 except ImportError:
@@ -80,13 +82,12 @@ class OpenBCIWiFi(object):
         if self.log:
             print("Welcome to OpenBCI Native WiFi Shield Driver - Please contribute code!")
 
-        self.local_ip_address = self._get_local_ip_address()
+        # get all local addresses (ipv4, ipv6, suppressLoopback)
+        self.local_ip_addresses = self._get_local_ip_addresses(True, False, True)
 
-        # Intentionally bind to port 0
-        self.local_wifi_server = WiFiShieldServer(self.local_ip_address, 0)
-        self.local_wifi_server_port = self.local_wifi_server.socket.getsockname()[1]
-        if self.log:
-            print("Opened socket on %s:%d" % (self.local_ip_address, self.local_wifi_server_port))
+        # wifi server is not created until after finding the shield
+        # self.local_wifi_server = WiFiShieldServer(self.local_ip_addresses[0], 0) #first address for now
+        # self.local_wifi_server_port = self.local_wifi_server.socket.getsockname()[1]
 
         if ip_address is None:
             for i in range(ssdp_attempts):
@@ -101,6 +102,13 @@ class OpenBCIWiFi(object):
             self.on_shield_found(ip_address)
 
     def on_shield_found(self, ip_address):
+        self.local_ip_address = self._get_local_ip_address(ip_address)
+        # Intentionally bind to port 0
+        self.local_wifi_server = WiFiShieldServer(self.local_ip_address, 0)
+        self.local_wifi_server_port = self.local_wifi_server.socket.getsockname()[1]
+        if self.log:
+            print("Opened socket on %s:%d" % (self.local_ip_address, self.local_wifi_server_port))
+
         self.ip_address = ip_address
         self.connect()
         # Disconnects from board when terminated
@@ -109,16 +117,62 @@ class OpenBCIWiFi(object):
     def loop(self):
         asyncore.loop()
 
-    def _get_local_ip_address(self):
+    def _get_local_ip_address(self, addr):
         """
         Gets the local ip address of this computer
         @returns str Local IP address
         """
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
+        s.connect((addr, 80))
         local_ip_address = s.getsockname()[0]
         s.close()
         return local_ip_address
+
+    def _get_local_ip_addresses(self, ipv4=True, ipv6=False, suppressLoopback=True):
+        """
+        Get all local ip addresses of this computers
+        @returns a list of str
+        """
+        allIPs = []
+        for iface in netifaces.interfaces():
+            ifaddrs = netifaces.ifaddresses(iface)
+            if(ipv4):
+                if netifaces.AF_INET in ifaddrs:
+                    for ifaddr in ifaddrs[netifaces.AF_INET]:
+                        if 'addr' in ifaddr:
+                            thisAddr = ifaddr['addr']
+                            if not ipaddress.ip_address(thisAddr).is_loopback or not suppressLoopback:
+                                allIPs.append(thisAddr)
+            if(ipv6):
+                if netifaces.AF_INET6 in ifaddrs:
+                    for ifaddr in ifaddrs[netifaces.AF_INET6]:
+                        if 'addr' in ifaddr:
+                            #add v6 but remove stuff like %eth0 that gets thrown on end of some addrs
+                            thisAddr = ifaddr['addr'].split('%')[0]
+                            if not ipaddress.ip_address(thisAddr).is_loopback or not suppressLoopback:
+                                allIPs.append(thisAddr)
+        return allIPs
+
+    # scans available interfaces and chooses the local IP address on the same network as addr
+    # def _get_matching_local_ip_address(self, addr=None):
+    #     """
+    #     Get matching ip to bind to (on the same network)
+    #     @returns a list of str
+    #     """
+    #     allIPs = []
+    #     for iface in netifaces.interfaces():
+    #         ifaddrs = netifaces.ifaddresses(iface)
+    #
+    #         if netifaces.AF_INET in ifaddrs:
+    #             for ifaddr in ifaddrs[netifaces.AF_INET]:
+    #                 if 'addr' in ifaddr:
+    #                     thisAddr = ifaddr['addr']
+    #                     thisMask = ifaddr['netmask']
+    #                     if ipaddress.ip_address(addr) in ipaddress.ip_network((thisAddr, thisMask), False):
+    #                         allIPs.append(thisAddr)
+    #
+    #     print ("allIPs", allIPs)
+    #     return allIPs[0] # I think it should only be address one anyway
 
     def getBoardType(self):
         """ Returns the version of the board """
@@ -224,7 +278,8 @@ class OpenBCIWiFi(object):
                     if wifi_shield_cb is not None:
                         wifi_shield_cb(cur_ip_address)
 
-        ssdp_hits = ssdp.discover("urn:schemas-upnp-org:device:Basic:1", timeout=self.timeout, wifi_found_cb=wifi_shield_found)
+        ssdp_hits = ssdp.discover("urn:schemas-upnp-org:device:Basic:1", timeout=self.timeout, wifi_found_cb=wifi_shield_found, all_ip_addresses=self.local_ip_addresses)
+        # ssdp_hits = ssdp.discover("urn:schemas-upnp-org:device:Basic:1", timeout=self.timeout, wifi_found_cb=wifi_shield_found)
 
         nb_wifi_shields = len(list_id)
 
