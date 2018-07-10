@@ -54,7 +54,7 @@ class OpenBCIWiFi(object):
 
     def __init__(self, ip_address=None, shield_name=None, sample_rate=None, log=True, timeout=3,
                  max_packets_to_skip=20, latency=10000, high_speed=True, ssdp_attempts=5,
-                 num_channels=8):
+                 num_channels=8, shield_found_cb=None): #shield_found_cb overrides automatically connecting to the found shield; it is passed (ip_address, shield_name, device_description);
         # these one are used
         self.daisy = False
         self.high_speed = high_speed
@@ -69,6 +69,7 @@ class OpenBCIWiFi(object):
         self.ssdp_attempts = ssdp_attempts
         self.streaming = False
         self.timeout = timeout
+        self.in_discovery = False
 
         # might be handy to know API
         self.board_type = "none"
@@ -88,20 +89,34 @@ class OpenBCIWiFi(object):
         # wifi server is not created until after finding the shield
         # self.local_wifi_server = WiFiShieldServer(self.local_ip_addresses[0], 0) #first address for now
         # self.local_wifi_server_port = self.local_wifi_server.socket.getsockname()[1]
+        self.local_wifi_server = None # until we find/connect to a shield
 
         if ip_address is None:
+            if self.shield_name is None:
+                print("Trying to find all WiFi shields on your local wireless network")
+            else:
+                print("Trying to find %s WiFi shield on your local wireless network" % (self.shield_name))
             for i in range(ssdp_attempts):
+                self.in_discovery = True
                 try:
-                    self.find_wifi_shield(wifi_shield_cb=self.on_shield_found)
-                    break
+                    if shield_found_cb is not None:
+                        this_cb = shield_found_cb
+                    else:
+                        this_cb = self.on_shield_found
+                    self.find_wifi_shield(shield_name=self.shield_name, wifi_shield_cb=this_cb)
+                    # self.find_wifi_shield(shield_name=self.shield_name)
+                    if not self.in_discovery:
+                        print("finishing discovery")
+                        break
                 except OSError:
                     # Try again
-                    if self.log:
-                        print("Did not find any WiFi Shields")
+                    if i >= (ssdp_attempts - 1) and self.log: #only log at the end
+                        print("Did not find matching WiFi Shields")
         else:
-            self.on_shield_found(ip_address)
+            self.on_shield_found(ip_address, shield_name, '')
 
-    def on_shield_found(self, ip_address):
+    def on_shield_found(self, ip_address, name, description):
+        self.in_discovery = False
         self.local_ip_address = self._get_local_ip_address(ip_address)
         # Intentionally bind to port 0
         self.local_wifi_server = WiFiShieldServer(self.local_ip_address, 0)
@@ -253,8 +268,7 @@ class OpenBCIWiFi(object):
         """Detects Ganglion board MAC address -- if more than 1 around, will select first. Needs root privilege."""
 
         if self.log:
-            print("Try to find WiFi shields on your local wireless network")
-            print("Scanning for %d seconds nearby devices..." % self.timeout)
+            print("Scanning nearby devices for %d seconds..." % self.timeout)
 
         list_ip = []
         list_id = []
@@ -269,30 +283,34 @@ class OpenBCIWiFi(object):
             list_id.append(cur_shield_name)
             list_ip.append(cur_ip_address)
             found_shield = True
+            print("Found WiFi Shield %s with IP Address %s" % (cur_shield_name, cur_ip_address))
             if shield_name is None:
-                print("Found WiFi Shield %s with IP Address %s" % (cur_shield_name, cur_ip_address))
+                # print("Found WiFi Shield %s with IP Address %s" % (cur_shield_name, cur_ip_address))
                 if wifi_shield_cb is not None:
-                    wifi_shield_cb(cur_ip_address)
+                    print("Proceeding with WiFi Shield %s" % (cur_shield_name))
+                    wifi_shield_cb(cur_ip_address, cur_shield_name, device_description)
             else:
                 if shield_name == cur_shield_name:
                     if wifi_shield_cb is not None:
-                        wifi_shield_cb(cur_ip_address)
+                        print("Proceeding with WiFi Shield %s" % (cur_shield_name))
+                        wifi_shield_cb(cur_ip_address, cur_shield_name, device_description)
 
-        ssdp_hits = ssdp.discover("urn:schemas-upnp-org:device:Basic:1", timeout=self.timeout, wifi_found_cb=wifi_shield_found, all_ip_addresses=self.local_ip_addresses)
+        ssdp_hits = ssdp.discover("urn:schemas-upnp-org:device:Basic:1", timeout=self.timeout, wifi_found_cb=wifi_shield_found, all_ip_addresses=self.local_ip_addresses) # send multicast on all local interfaces
         # ssdp_hits = ssdp.discover("urn:schemas-upnp-org:device:Basic:1", timeout=self.timeout, wifi_found_cb=wifi_shield_found)
 
         nb_wifi_shields = len(list_id)
 
         if nb_wifi_shields < 1:
-            print("No WiFi Shields found ;(")
+            # print("No WiFi Shields found ;(")
             raise OSError('Cannot find OpenBCI WiFi Shield with local name')
 
-        if nb_wifi_shields > 1:
-            print(
-                "Found " + str(nb_wifi_shields) +
-                ", selecting first named: " + list_id[0] +
-                " with IPV4: " + list_ip[0])
-            return list_ip[0]
+        # we're not using this anyway
+        # if nb_wifi_shields > 1:
+        #     print(
+        #         "Found " + str(nb_wifi_shields) +
+        #         ", selecting first named: " + list_id[0] +
+        #         " with IPV4: " + list_ip[0])
+        #     return list_ip[0]
 
     def wifi_write(self, output):
         """
@@ -329,14 +347,15 @@ class OpenBCIWiFi(object):
         """
         start_time = timeit.default_timer()
 
-        # Enclose callback funtion in a list if it comes alone
-        if not isinstance(callback, list):
-            self.local_wifi_server.set_callback(callback)
-        else:
-            self.local_wifi_server.set_callback(callback[0])
+        if self.local_wifi_server is not None:
+            # Enclose callback funtion in a list if it comes alone
+            if not isinstance(callback, list):
+                self.local_wifi_server.set_callback(callback)
+            else:
+                self.local_wifi_server.set_callback(callback[0])
 
-        if not self.streaming:
-            self.init_streaming()
+            if not self.streaming:
+                self.init_streaming()
 
         # while self.streaming:
         #     # should the board get disconnected and we could not wait for notification anymore, a reco should be attempted through timeout mechanism
