@@ -382,6 +382,7 @@ class OpenBCIWiFi(object):
         #     self.check_connection()
 
     def test_signal(self, signal):
+        #FIXME: 0 (']' char) doesn't disable the test! it changes square wave's freqency
         """ Enable / disable test signal """
         if signal == 0:
             self.warn("Disabling synthetic square wave")
@@ -398,7 +399,7 @@ class OpenBCIWiFi(object):
         else:
             self.warn("%s is not a known test signal. Valid signal is 0-1" % signal)
 
-    def set_channel(self, channel, toggle_position):
+    def set_channel(self, channel, toggle_position): #FIXME: doesn't address all channels on cyton/daisy
         """ Enable / disable channels """
         try:
             # Commands to set toggle to on position
